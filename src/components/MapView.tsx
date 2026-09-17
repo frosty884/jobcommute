@@ -12,6 +12,7 @@ declare global {
   interface Window {
     google: any;
     initGoogleMap?: () => void;
+    gm_authFailure?: () => void;
   }
 }
 
@@ -34,6 +35,12 @@ export const MapView: React.FC<MapViewProps> = ({ result, apiKey }) => {
       setMapLoaded(true);
       return;
     }
+
+    // Handle Google Maps auth failure gracefully
+    window.gm_authFailure = () => {
+      console.warn("Google Maps authentication failed, using fallback map view.");
+      setMapError(true);
+    };
 
     // Check if script tag already exists
     const existingScript = document.getElementById("google-maps-script");

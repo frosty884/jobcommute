@@ -28,7 +28,7 @@ export const CommuteForm: React.FC<CommuteFormProps> = ({ onCheckCommute, isLoad
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Debounced autocomplete fetch
+  // Debounced autocomplete fetch (works on GitHub Pages and local)
   useEffect(() => {
     if (!address.trim() || address.trim().length < 2) {
       setSuggestions([]);
@@ -38,20 +38,101 @@ export const CommuteForm: React.FC<CommuteFormProps> = ({ onCheckCommute, isLoad
     const timer = setTimeout(async () => {
       try {
         setIsFetchingSuggestions(true);
-        const res = await fetch(`/api/autocomplete?input=${encodeURIComponent(address.trim())}`);
-        if (res.ok) {
-          const data = await res.json();
-          setSuggestions(data.predictions || []);
+
+        // 1. Try Google Maps JS client-side AutocompleteService if available
+        if (window.google?.maps?.places?.AutocompleteService) {
+          try {
+            const service = new window.google.maps.places.AutocompleteService();
+            service.getPlacePredictions(
+              {
+                input: address.trim(),
+                componentRestrictions: { country: "us" },
+                locationBias: {
+                  radius: 50000,
+                  center: { lat: 41.9804, lng: -87.8407 }, // Catalpa origin
+                },
+              },
+              (predictions: any, status: any) => {
+                if (status === "OK" && predictions && predictions.length > 0) {
+                  setSuggestions(
+                    predictions.map((p: any) => ({
+                      description: p.description,
+                      mainText: p.structured_formatting?.main_text || p.description,
+                      secondaryText: p.structured_formatting?.secondary_text || "",
+                    }))
+                  );
+                  setIsFetchingSuggestions(false);
+                  return;
+                }
+                fallbackLocalSuggestions(address.trim());
+              }
+            );
+            return;
+          } catch (e) {
+            console.warn("Client places service failed:", e);
+          }
         }
+
+        // 2. Try server endpoint if available
+        try {
+          const res = await fetch(`/api/autocomplete?input=${encodeURIComponent(address.trim())}`);
+          if (res.ok) {
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+              const data = await res.json();
+              if (data.predictions && data.predictions.length > 0) {
+                setSuggestions(data.predictions);
+                setIsFetchingSuggestions(false);
+                return;
+              }
+            }
+          }
+        } catch {
+          // Server not present (e.g. GitHub Pages)
+        }
+
+        // 3. Fallback local Chicagoland directory
+        fallbackLocalSuggestions(address.trim());
       } catch (err) {
         console.warn("Autocomplete fetch failed", err);
       } finally {
         setIsFetchingSuggestions(false);
       }
-    }, 250);
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [address]);
+
+  const fallbackLocalSuggestions = (query: string) => {
+    const chicagoHubs = [
+      "100 S Wacker Dr, Chicago, IL 60606",
+      "111 W Jackson Blvd, Chicago, IL 60604",
+      "100 W Randolph St, Chicago, IL 60601",
+      "Merchandise Mart, 222 W Merchandise Mart Plaza, Chicago, IL 60654",
+      "O'Hare International Airport, Chicago, IL 60666",
+      "1000 W Fulton Market, Chicago, IL 60607",
+      "Rush University Medical Center, 1653 W Congress Pkwy, Chicago, IL",
+      "Rosemont Theatre, 5400 N River Rd, Rosemont, IL 60018",
+      "Woodfield Mall, Schaumburg, IL 60173",
+      "Northwestern University, Evanston, IL 60208",
+      "Willis Tower, 233 S Wacker Dr, Chicago, IL 60606",
+      "Navy Pier, 600 E Grand Ave, Chicago, IL 60611",
+      "UIC East Campus, 1200 W Harrison St, Chicago, IL 60607",
+      "Oakbrook Center, 100 Oakbrook Center, Oak Brook, IL 60523",
+      "Allstate Headquarters, 2775 Sanders Rd, Northbrook, IL 60062",
+    ];
+
+    const q = query.toLowerCase();
+    const matches = chicagoHubs
+      .filter((h) => h.toLowerCase().includes(q))
+      .map((h) => ({
+        description: h,
+        mainText: h.split(",")[0],
+        secondaryText: h.split(",").slice(1).join(",").trim(),
+      }));
+
+    setSuggestions(matches);
+  };
 
   // Click outside to close autocomplete dropdown
   useEffect(() => {
