@@ -1,0 +1,6 @@
+{
+  "name": "Chicago Transit Commute Verifier",
+  "description": "Cross-reference job addresses to verify if they are within a 1-hour mixed transit and walking commute of 8558 W Catalpa, Chicago, IL.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
